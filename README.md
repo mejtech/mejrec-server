@@ -1,121 +1,169 @@
-# RecFlare
+# mejrec-server
 
-<img width="1063" height="409" alt="image" src="https://github.com/user-attachments/assets/521d5b11-fb93-4900-9158-71d51d2343ae" />
+An easy-setup, **fully local** Rec Room server. One machine, no Cloudflare account, no
+Photon Cloud — realtime (rooms, matchmaking, events) is self-hosted with
+[Luxon Server](https://github.com/niansa/LuxonServer), so the only thing that still wants
+a hosted backend is **voice chat**, and that's optional.
 
-![badge](https://github.com/djdevin/recflare/actions/workflows/test.yml/badge.svg?branch=main)
+It's a fork of [RecFlare](https://github.com/recflare/server) (MIT) that adds a local
+play layer on top of the same Workers.
 
-RecFlare is a scalable implementation of RecNet — the Rec Room backend — built on
-Cloudflare Workers. It implements the network services the Rec Room client talks
-to — accounts, auth, rooms, matchmaking, economy, chat, notifications, and more —
-each as an independent Node.js Worker on their own subdomains, just how RecNet was.
+> ⚠️ Unofficial, fan-made, for preservation and experimentation. Not affiliated with or
+> endorsed by Rec Room Inc. "Rec Room" is a trademark of its respective owner.
 
-> ⚠️ **Disclaimer:** This is an unofficial, fan-made project for preservation and
-> experimentation. It is not affiliated with, endorsed by, or connected to Rec
-> Room Inc. "Rec Room" is a trademark of its respective owner.
+## What you get
 
-## Why?
+- All 27 RecFlare Workers — accounts, auth, rooms, matchmaking, economy, chat, clubs,
+  leaderboards, notifications, … — running locally on one box.
+- **Luxon** as a drop-in Photon Realtime server (Name/Master/Game, lobbies, matchmaking,
+  rooms, actor/event relay). No Photon Cloud app or account needed for room networking.
+- A self-signed **TLS front door** so a patched client can reach everything over
+  `https://<service>.rec.localhost:8443` (no `/etc/hosts` edits — `*.localhost` resolves
+  to loopback).
+- One control script: `local/server.sh start | stop | restart | status`.
 
-There are already so many multiplayer clones, why?
+```
+client ──HTTPS──▶ proxy (443 + 8443, 127.0.0.1 + ::1)
+                    ├─ <service>.rec.localhost ─▶ worker :8787+i
+                    └─ ns.rec.localhost         ─▶ ns worker
 
-1. None of them are fully open source (some had leaks of old code).
-2. None of them run on microservice architecture, most on a single server.
-3. None of them had unit tests, so servers are constantly buggy.
-4. "Upgrading the server" is not sustainable plan for growth.
-5. This was fun (sort of). The goal was to build a project that everyone could use. No gatekeeping or viruses.
+client ──UDP────▶ Luxon  (5058 Name / 5055 Master / 5056 Game, dashboard :5088)
+```
 
-# Infrastructure
+## Requirements
 
-RecFlare uses a true microservice architecture which is infinitely scalable
-and could support the same number of concurrent users as the original game. It
-will never run out of CPU, memory, or disk space.
+- **Linux x86-64** (the Luxon prebuilt; build it from source on other platforms)
+- Node 24, pnpm, bun, just — pinned in `.mise.toml`; `mise install` gets them
+- `openssl`, `curl`, and a Cloudflare-free sense of adventure
 
-Of course, cloud services cost money. That's the only limitation. So we'll see!
+## Setup
 
-And being truly open source means that this project should have more eyes on it,
-resulting in bugs getting fixed faster. I hope.
+```sh
+git clone https://github.com/mejtech/mejrec-server
+cd mejrec-server
+local/setup.sh
+```
 
-## Game client
+`setup.sh` is interactive and does the rest:
 
-See [RecFlare Client](https://github.com/djdevin/recflare-client) for the official RecFlare build.
+1. asks which **realtime backend** to use:
+   - **Luxon (recommended)** — self-hosted, fully local, no Photon account. Voice chat is not available.
+   - **Photon Cloud** — realtime *and* voice go through Photon Cloud; you supply your own app ids.
 
-These game builds are supported:
+   (A "Luxon realtime + Photon voice" split isn't possible: the client uses one Photon endpoint for both, so voice follows whichever backend you pick.)
+2. generates the TLS cert, and for Luxon downloads the binary + writes `luxon/config.yml`
+3. writes `.env` (`RECFLARE_DOMAIN=rec.localhost:8443`, the subdomain override, backend-appropriate Photon ids)
+4. runs `pnpm install`
+5. applies the D1 schema into the shared local database
+6. seeds the shared `JWT_SECRET`
+7. offers to let the proxy bind 443 (needs `sudo`)
 
-| Build         | Manifest              | Support                                                                                 |
-| ------------- | --------------------- | --------------------------------------------------------------------------------------- |
-| `20230414`    | `7859140924515540835` | **Default**, official — the 2023 build the rest of the stack targets                    |
-| `20250718.01` | `1151455856673601091` | **Beta**, official — use the [patch-2025](https://github.com/recflare/patch-2025) patch |
-| `20250424.01` |                       | Alpha                                                                                   |
-| `20231207`    |                       | Alpha                                                                                   |
-| `20230616`    |                       | Alpha                                                                                   |
+Then:
 
-Alpha builds get past the version check and largely work, but nothing else in the
-stack targets them, so expect protocol differences. Other client or game versions
-may expect different endpoints and response shapes and are not supported.
+```sh
+local/server.sh start
+local/server.sh status     # 27/27 workers running / proxy running / luxon running
+```
 
-Generally speaking any client that effectively rewrites the nameserver with the
-right mods (see [RecNet Plugin](https://github.com/djdevin/recnet-plugin), [2025 patch](https://github.com/recflare/patch-2025)) can be used with this server.
+Logs: `local/logs/<worker>.log`, `local/proxy.log`, `local/luxon/luxon.log`.
+Luxon dashboard: http://127.0.0.1:5088/
 
-## Services
+The choice is saved to `local/backend`, so `server.sh` knows whether to start Luxon.
 
-See [SERVICES.md](SERVICES.md)
+<details>
+<summary>Manual equivalent (what setup.sh runs)</summary>
 
-## Deploying
+```sh
+cp .env.example .env
+#   RECFLARE_DOMAIN=rec.localhost:8443
+#   RECFLARE_SUBDOMAINS='{"moderation":"api"}'
+#   RECFLARE_PHOTON_*= any GUID (Luxon ignores them) or your Photon Cloud apps
+pnpm install
 
-Want to run it yourself? See [DEPLOYING.md](DEPLOYING.md)
+for w in api auth chat clubs econ img leaderboard lists match roomcomments rooms; do
+  (cd apps/$w && PATH="$PWD/node_modules/.bin:$PATH" run-wrangler-migrate --local)
+done
 
-## FAQ
+cd apps/auth
+printf 'local-dev-jwt-secret-do-not-use-in-prod' |
+  PATH="$PWD/node_modules/.bin:$PATH" wrangler secrets-store secret create local \
+    --name JWT_SECRET --scopes workers --persist-to "$(git rev-parse --show-toplevel)/.wrangler/state"
+cd ../..
 
-### What year is this for?
+# the proxy binds 443 too (the 2023 client's nameserver fetch drops the port):
+sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443
+echo 'net.ipv4.ip_unprivileged_port_start=443' | sudo tee /etc/sysctl.d/99-recflare.conf
+```
 
-Most 2023 and 2025 clients. A few older builds work at
-alpha quality — see the table in the "Game client" section above. Other clients may not
-work.
+</details>
 
-See the "Game client" section above for instructions on how to modify a client to connect to this server.
+## Client setup
 
-### Can I run this locally on my PC?
+### Recommended: the 2023 client (`20230414`)
 
-It's not currently supported. But theoretically, you could.
+It's the build this stack targets, and its Dorm has the native **Rec Center** door.
+Using the [RecNet Plugin](https://github.com/djdevin/recnet-plugin) (BepInEx), edit
+`BepInEx/config/net.rec.plugin.cfg`:
 
-See "Run the development microservices" above. It may be possible later as Wrangler will mock remote services. YMMV for now.
+```ini
+[Advanced]
+Enabled Advanced Settings = true
+Photon NameServer = 127.0.0.1
+Photon NameServer Port = 5058
 
-### Can I use this to make my own server?
+[Photon]
+App Id Realtime = <a guid>
+App Id Voice = <a guid>
+App Id Chat = <a guid>
 
-Yes, that's the point. See [DEPLOYING.md](DEPLOYING.md)
+[Server]
+RecNet NameServer Host = https://ns.rec.localhost:8443
+```
 
-### Is there an admin panel?
+Launch it through Steam (a non-Steam shortcut) with launch options
+`WINEDLLOVERRIDES="winhttp=n,b" %command%` so Doorstop/BepInEx loads; the 2023 client
+logs in via Steam and needs Steam's identity.
 
-Yes, the server comes bundled with a simple web panel with more functionality being added.
+### 2025 client (`20250718.01`)
 
-There are also [CLI tools](CLI.md) you can use for admin tasks like granting roles.
+Using the [2025 patch](https://github.com/recflare/patch-2025) injector, in `2025patch.ini`:
 
-### Can I copy this project and modify it?
+```ini
+ApiHost=ns.rec.localhost:8443
+PhotonHost=127.0.0.1
+PhotonPort=5058
+```
 
-Yes, see the [LICENSE](LICENSE).
+Caveat: that build's Dorm door is the **Room-i-verse** door. Its *destination* is
+server-configurable, but its label is baked into the client — use the 2023 client if you
+want the Rec Center door.
 
-I would love if you contributed your changes back.
+## Voice
 
-### Why a monorepo?
+Voice is the one piece that isn't local:
 
-The services share types, auth logic, and tooling, so keeping them in one repo
-keeps those in sync: `pnpm` workspaces share dependencies, `@repo/` packages
-share code, Turborepo runs build/test/lint with a single cached task graph, and
-cross-service changes land in one atomic commit.
+- The **2023 client** uses **Photon Voice** — Luxon carries its signaling (it joins the
+  `<roomId>_voice_` room), but rejects one of its packets, so voice doesn't work yet.
+- The **2025 client** uses **Tachyon**, Rec Room's own voice service, which ships nowhere
+  here.
 
-This makes it easier to deploy the whole stack at once or a smaller selection
-of microservices to avoid downtime events.
+Room networking, text chat (RecFlare's `chat` worker), party chat and everything else work
+without any Photon account.
 
-## Credits
+## What this fork changes
 
-I started this soon after the official servers shut down when I saw there were
-only monolithic servers usually running on one server. I could only see the
-request shapes coming from the game client. I used many different projects as
-resources to get response shapes, logic examples, enums, etc. They all had
-missing pieces. Again, another reason to come together on one project and
-stop gatekeeping.
+- `packages/tools/bin/run-wrangler-dev` — every worker shares one local persist dir
+  (`.wrangler/state`), so the shared `recflare` D1 really is shared; and inspector ports
+  start at `19229` so Vite (`www`) doesn't steal one.
+- `packages/tools/bin/run-wrangler-migrate` — `--local` targets that same shared dir.
+- `apps/ns/wrangler.jsonc` — dev `DOMAIN`/`SUBDOMAINS` default to the local hosts
+  (`rec.localhost:8443`); deploy still overrides them from `.env`.
+- `local/` — the play layer described above.
 
-- [CannedNet](https://github.com/CannedNet/CannedNet)
-- [DorkNet](https://github.com/DorkSquadRR/DorkNet)
-- jordanparki7's postman collection of RecNet APIs which is gone for some reason.
-- Leaked C# projects I won't list (for response shapes)
-- Claude and my [wire shapes skill](https://github.com/recflare/skills/blob/main/.claude/skills/wire-shapes/SKILL.md)
+## Credits & license
+
+MIT, © djdevin and contributors. Built on [RecFlare](https://github.com/recflare/server);
+Photon Realtime by [Luxon Server](https://github.com/niansa/LuxonServer); client patches by
+[recflare/patch-2025](https://github.com/recflare/patch-2025) and
+[recnet-plugin](https://github.com/djdevin/recnet-plugin). See `DEPLOYING.md` for the
+upstream Cloudflare deployment path.

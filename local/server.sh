@@ -6,16 +6,18 @@
 # script is started directly. Ports still come from run-wrangler-dev, so proxy.mjs's map
 # is right. Everything lives under local/; the repo is this folder's parent.
 #
-#   local/start-server.sh start     start workers + proxy + luxon
-#   local/start-server.sh stop      stop all three
-#   local/start-server.sh restart
-#   local/start-server.sh status
+#   local/server.sh start     start workers + proxy + luxon
+#   local/server.sh stop      stop all three
+#   local/server.sh restart
+#   local/server.sh status
 set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 REPO="${RECFLARE_REPO:-$(cd "$HERE/.." && pwd)}"
 LUXON_DIR="$HERE/luxon"
 LOGDIR="$HERE/logs"
 PIDDIR="$HERE/pids"
+# Which realtime backend local/setup.sh configured: luxon (default) or photon.
+BACKEND="$(cat "$HERE/backend" 2>/dev/null || echo luxon)"
 
 export PATH="$HOME/.local/bin:$PATH"
 eval "$(mise activate bash 2>/dev/null)" || true
@@ -69,6 +71,10 @@ start_workers() {
 }
 
 start_luxon() {
+	if [ "$BACKEND" != luxon ]; then
+		echo "backend=$BACKEND: not starting luxon"
+		return
+	fi
 	if alive "$LUXON_DIR/luxon.pid"; then
 		echo "already running: luxon"
 		return
@@ -84,13 +90,28 @@ start_luxon() {
 	echo "started: luxon"
 }
 
+start_proxy() {
+	if alive "$HERE/proxy.pid"; then
+		echo "already running: proxy"
+		return
+	fi
+	nohup node "$HERE/proxy.mjs" >"$HERE/proxy.log" 2>&1 &
+	echo $! >"$HERE/proxy.pid"
+	sleep 1
+	if alive "$HERE/proxy.pid"; then
+		echo "started: proxy"
+	else
+		echo "proxy failed to start; see $HERE/proxy.log" >&2
+	fi
+}
+
 start() {
 	warn_if_443_locked
 	start_workers
 	start_luxon
 	# Proxy last, once the workers have had a moment to bind.
 	sleep 3
-	"$HERE/start.sh"
+	start_proxy
 }
 
 stop() {
@@ -116,7 +137,11 @@ status() {
 	done < <(apps)
 	echo "$up/$total workers running"
 	alive "$HERE/proxy.pid" && echo "proxy running" || echo "proxy down"
-	alive "$LUXON_DIR/luxon.pid" && echo "luxon running" || echo "luxon down"
+	if [ "$BACKEND" = luxon ]; then
+		alive "$LUXON_DIR/luxon.pid" && echo "luxon running" || echo "luxon down"
+	else
+		echo "luxon skipped (backend=$BACKEND)"
+	fi
 }
 
 case "${1:-start}" in

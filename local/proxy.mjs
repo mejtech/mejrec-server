@@ -11,7 +11,8 @@
 // Two port/address quirks are deliberate:
 //   - It listens on 443 as well as 8443. The 2025 patch rewrites the whole URI (keeping
 //     the :8443), but the 2023 BepInEx plugin swaps only the HOST of `https://ns.rec.net`,
-//     so its first nameserver fetch lands on 443. Binding 443 needs privilege; see README.
+//     so its first nameserver fetch lands on 443. Binding 443 needs privilege; see the
+//     repo README.
 //   - It listens on both loopbacks. `*.localhost` resolves to 127.0.0.1 *and* ::1, and
 //     Wine/BestHTTP will pick the IPv6 one, so missing ::1 means ECONNREFUSED on half the
 //     requests.
