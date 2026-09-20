@@ -1,0 +1,11 @@
+# Generated / downloaded by local/setup.sh — not committed.
+cert.pem
+key.pem
+proxy.log
+proxy.pid
+logs/
+pids/
+luxon/luxon_server
+luxon/config.yml
+luxon/luxon.log
+luxon/luxon.pid

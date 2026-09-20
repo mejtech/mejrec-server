@@ -1,0 +1,42 @@
+# Luxon Server — a self-hosted Photon Realtime replacement for local play.
+#
+# Standard Photon ports, all bound to loopback. The Rec Room client reaches these by
+# having its patch/plugin point Photon at 127.0.0.1:5058 (no /etc/hosts edit needed).
+# Copy to config.yml; local/setup.sh does this for you and fetches the binary.
+Servers:
+  NameServer:
+    - port: 5058
+      external_address: 127.0.0.1:5058
+      proxies:
+        - protocol: TCP
+          address: 127.0.0.1:4533
+    - port: 27000
+      external_address: 127.0.0.1:27000
+
+  MasterServer:
+    - port: 5055
+      external_address: 127.0.0.1:5055
+      proxies:
+        - protocol: TCP
+          address: 127.0.0.1:4530
+    - port: 27001
+      external_address: 127.0.0.1:27001
+
+  GameServer:
+    - port: 5056
+      external_address: 127.0.0.1:5056
+      proxies:
+        - protocol: TCP
+          address: 127.0.0.1:4531
+    - port: 27002
+      external_address: 127.0.0.1:27002
+
+EnableIPv6: false
+MaxConnections: 20
+MaxGamePeers: 0
+TickTimeBudget: 2000
+
+HTTP:
+  enabled: true
+  address: 127.0.0.1
+  port: 5088

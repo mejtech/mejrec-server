@@ -15,7 +15,11 @@
 	"vars": {
 		"ENVIRONMENT": "development", // overridden during deployment
 		"SENTRY_RELEASE": "unknown", // overridden during deployment
-		"DOMAIN": "rec.example.com", // base domain; overridden during deployment
-		"SUBDOMAINS": "{}" // per-service subdomain overrides; overridden during deployment
+		// Local play: every *.rec.localhost name resolves to 127.0.0.1, so the endpoints
+		// document is reachable without editing /etc/hosts. The :8443 is the local TLS
+		// proxy (see local/README.md). Deploy always overrides both vars from
+		// RECFLARE_DOMAIN / RECFLARE_SUBDOMAINS, so this default only affects `just dev`.
+		"DOMAIN": "rec.localhost:8443", // base domain; overridden during deployment
+		"SUBDOMAINS": "{\"moderation\":\"api\"}" // per-service subdomain overrides; overridden during deployment
 	}
 }
