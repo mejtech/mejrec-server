@@ -40,7 +40,10 @@ export CI=${CI:-true}
 
 if [ "$LOCAL" -eq 1 ]; then
 	# Local db keys off the "local" placeholder, so the committed config is fine.
-	exec wrangler d1 migrations apply "$DB_NAME" "$@"
+	# Must target the same shared persist dir `wrangler dev` uses (see run-wrangler-dev),
+	# or migrations land in a per-worker database the running workers never read.
+	exec wrangler d1 migrations apply "$DB_NAME" \
+		--persist-to "$(git rev-parse --show-toplevel)/.wrangler/state" "$@"
 fi
 
 # RECFLARE_D1 comes from the gitignored root .env, or from CI secrets, which win over it.

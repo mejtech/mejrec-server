@@ -25,12 +25,23 @@ OFFSET=$(
 	done | sort | grep -Fnx "$NAME" | cut -d: -f1
 )
 PORT=$((8787 + OFFSET - 1))
-INSPECTOR_PORT=$((9229 + OFFSET - 1))
+# Inspector ports start well above Node's default 9229: Vite (the `www` worker's dev
+# server) asks Node for an inspector port and walks upward from 9229, so a worker
+# numbered into that run loses the bind. A high base keeps the two schemes apart.
+INSPECTOR_PORT=$((19229 + OFFSET - 1))
+
+# All workers share ONE local persist dir. The `recflare` D1 (and KV/R2/Secrets Store)
+# are shared across services in production, but wrangler otherwise keeps local state
+# under each worker's own .wrangler/state — so `auth` couldn't read a table `api` owns
+# (e.g. `report`), and every service saw a different database. Pointing every worker at
+# the repo-root .wrangler/state (gitignored) makes local dev match the deployed topology.
+PERSIST_TO="$(git rev-parse --show-toplevel)/.wrangler/state"
 
 # $EXTRA_VARS is intentionally unquoted — it's a flag list to word-split on.
 exec wrangler dev \
 	--var NAME:"$NAME" \
 	$EXTRA_VARS \
+	--persist-to "$PERSIST_TO" \
 	--port "$PORT" \
 	--inspector-port "$INSPECTOR_PORT" \
 	"$@"
